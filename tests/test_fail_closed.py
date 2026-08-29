@@ -148,3 +148,10 @@ def test_dev_requirements_are_pinned():
     assert "ruff==" in text
     assert "pytest==" in text
     assert (ROOT / "uv.lock").is_file()
+
+
+def test_agents_md_exists():
+    text = (ROOT / "AGENTS.md").read_text()
+    assert "make ci" in text
+    assert "requirements-dev.txt" in text
+    assert ".env" in text
