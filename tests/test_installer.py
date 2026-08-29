@@ -7,6 +7,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "install.sh"
 
@@ -150,18 +152,72 @@ def test_deployment_assets_keep_fail_closed_boundaries():
     assert "NoNewPrivileges=true" in unit
 
 
-def test_proxmox_defaults_are_unprivileged_without_nesting():
+def test_proxmox_uses_generated_community_debian_script():
     installer = INSTALLER.read_text()
 
-    assert "--unprivileged 1" in installer
-    assert "--memory 1024" in installer
-    assert "--swap 512" in installer
-    assert '"${root_storage}:4"' in installer
-    assert "--onboot 1" in installer
-    assert "--features nesting" not in installer
-    assert "debian-13-standard" in installer
-    assert "debian-12-standard" in installer
+    assert (
+        "https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/debian.sh"
+        in installer
+    )
+    assert "mode=generated" in installer
+    assert 'var_ctid="$ctid"' in installer
+    assert 'var_net="$network"' in installer
+    assert 'var_gateway="$gateway"' in installer
+    assert "pct create" not in installer
     assert "pct push" in installer and "--perms 0600" in installer
+
+
+def test_proxmox_generated_mode_receives_static_network_values(tmp_path):
+    events = tmp_path / "events"
+    command = r"""
+source "$1"
+TEMP_DIR=""
+curl() { printf 'exit 0\n'; }
+bash() { printf '%s|%s|%s|%s\n' "$mode" "$var_ctid" "$var_net" "$var_gateway" >> "$EVENTS"; }
+pct() { return 0; }
+export EVENTS="$2"
+create_debian_lxc 123 10.0.0.20/8 10.0.0.1
+CREATED_CT=""
+"""
+
+    result = subprocess.run(
+        ["bash", "-c", command, "proxmox-test", str(INSTALLER), str(events)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert events.read_text().strip() == "generated|123|10.0.0.20/8|10.0.0.1"
+
+
+@pytest.mark.parametrize("mode", ["docker", "native", "proxmox"])
+def test_installer_runs_from_stdin_for_every_mode(mode):
+    result = subprocess.run(
+        ["bash", "-s", "--", mode, "--help"],
+        input=INSTALLER.read_text(),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Usage:" in result.stdout
+
+
+def test_readme_streams_installer_for_every_path_without_clone():
+    readme = (ROOT / "README.md").read_text()
+    installer_url = (
+        "https://raw.githubusercontent.com/nberardi/"
+        "hermes-agent-bridge/refs/heads/main/install.sh"
+    )
+
+    assert readme.count(installer_url) >= 3
+    for mode in ("docker", "native", "proxmox"):
+        assert f"| sudo bash -s -- {mode}" in readme
+    assert "--version v0.2.0" not in readme
+    assert "git clone" not in readme
+    assert "community-scripts/ProxmoxVE" not in readme
 
 
 def test_release_workflow_guards_version_and_builds_both_architectures():
