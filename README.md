@@ -55,10 +55,33 @@ The client must not use localhost, RFC1918, or stdio to reach Hermes. Happy path
 
 ## Deploy
 
-One image, env file per site. Copy `deploy/site.env.example` to a host path outside git (e.g. `/etc/hermes-agent-bridge.env`) and fill Access AUD, team domain, public hostname, and the dashboard URL. Do not commit the filled file.
+Requires **Python 3.12+**. The image and local run both use `python3 -m hermes_agent_bridge`.
+
+One image, env file per site. Copy `deploy/site.env.example` to `/etc/hermes-agent-bridge.env` (or set `HERMES_BRIDGE_ENV` to another path). Fill every **required** key. Do not commit the filled file.
+
+Required:
+
+- `SITE`
+- `PUBLIC_HOSTNAMES`
+- `CF_ACCESS_TEAM_DOMAIN`
+- `CF_ACCESS_AUD`
+- `HERMES_DASHBOARD_URL`
+
+Optional: `HERMES_DASHBOARD_TOKEN`, `HERMES_API_URL`, `HERMES_API_KEY`, `HERMES_KANBAN_BOARD`, `BIND_PORT`.
+
+Leaving `CF_ACCESS_AUD` or `HERMES_DASHBOARD_URL` empty (as in the sample) fails at process start with `{NAME} is required`. Compose loads that file into the container. It does not interpolate those keys from your shell.
 
 ```bash
-export $(grep -v '^#' /etc/hermes-agent-bridge.env | xargs)
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e .
+set -a
+. /etc/hermes-agent-bridge.env
+set +a
+python3 -m hermes_agent_bridge
+```
+
+```bash
 docker compose -f deploy/compose.yaml up -d --build
 ```
 
@@ -69,7 +92,8 @@ Join the container to the same docker network Hermes already uses (`HERMES_DOCKE
 ## Local tests
 
 ```bash
-python -m venv .venv && . .venv/bin/activate
+python3 -m venv .venv
+. .venv/bin/activate
 pip install -e '.[dev]'
 pytest
 ```

@@ -58,5 +58,5 @@ class Settings:
             api_url=os.environ.get("HERMES_API_URL", "").rstrip("/"),
             api_key=os.environ.get("HERMES_API_KEY", "").strip(),
             kanban_board=os.environ.get("HERMES_KANBAN_BOARD", "").strip(),
-            site=os.environ.get("SITE", "").strip() or "unknown",
+            site=_require("SITE"),
         )

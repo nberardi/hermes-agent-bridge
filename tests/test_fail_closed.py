@@ -108,3 +108,25 @@ def test_happy_path_is_named_https_not_rfc1918():
     assert "https://mcp.example.com/mcp" in readme
     assert "RFC1918" in readme or "rfc1918" in readme.lower()
     assert "stdio" in readme.lower()
+
+
+def test_readme_documents_runtime():
+    readme = (ROOT / "README.md").read_text()
+    assert "python3" in readme
+    assert "Python 3.12" in readme
+    assert "python3 -m hermes_agent_bridge" in readme
+    for key in (
+        "SITE",
+        "PUBLIC_HOSTNAMES",
+        "CF_ACCESS_TEAM_DOMAIN",
+        "CF_ACCESS_AUD",
+        "HERMES_DASHBOARD_URL",
+    ):
+        assert key in readme
+
+
+def test_compose_loads_env_file_not_host_interpolation():
+    text = (ROOT / "deploy" / "compose.yaml").read_text()
+    assert "${CF_ACCESS_AUD:?set" not in text
+    assert "${SITE:?set" not in text
+    assert "env_file:" in text
