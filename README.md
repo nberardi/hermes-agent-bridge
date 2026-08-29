@@ -35,25 +35,6 @@ Have these values ready:
 Cloudflare Tunnel and Access must already exist. The installer does not create
 or change them, your firewall, or router/NAT rules.
 
-### Download and verify the installer for Docker or native Linux
-
-Run this on the Docker host or native Linux host. If you chose Proxmox, skip
-this download and continue to Option C, which streams the installer directly
-from GitHub.
-
-```bash
-version=v0.1.0
-curl --fail --location --remote-name \
-  "https://github.com/nberardi/hermes-agent-bridge/releases/download/${version}/install.sh"
-curl --fail --location --remote-name \
-  "https://github.com/nberardi/hermes-agent-bridge/releases/download/${version}/SHA256SUMS"
-grep '  install.sh$' SHA256SUMS > install.sh.sha256
-sha256sum --check install.sh.sha256
-chmod +x install.sh
-```
-
-Now follow Option A or Option B. Proxmox users start at Option C instead.
-
 ### Option A: Docker
 
 Use this when Hermes and cloudflared already share a Docker network. The
@@ -62,7 +43,9 @@ network must exist before installation. Its name is often `hermes`.
 Run on the Docker host:
 
 ```bash
-sudo ./install.sh docker --version v0.1.0
+curl -fsSL \
+  https://raw.githubusercontent.com/nberardi/hermes-agent-bridge/refs/heads/main/install.sh \
+  | sudo bash -s -- docker
 ```
 
 The installer:
@@ -91,7 +74,9 @@ host must be able to reach Hermes on the private network.
 Run on that Linux host:
 
 ```bash
-sudo ./install.sh native --version v0.1.0
+curl -fsSL \
+  https://raw.githubusercontent.com/nberardi/hermes-agent-bridge/refs/heads/main/install.sh \
+  | sudo bash -s -- native
 ```
 
 The installer:
@@ -132,21 +117,11 @@ The installer:
    unused ID.
 2. Uses DHCP by default. If you choose static networking, it asks for the LXC
    IP/CIDR and gateway.
-3. Creates the unprivileged Debian LXC with the Proxmox Community Scripts
-   generated-mode installer.
+3. Downloads the Proxmox Community Scripts Debian installer and passes it the
+   selected CT ID and network settings in generated mode.
 4. Transfers configuration through a protected temporary file.
 5. Runs the native installer inside the LXC with `pct exec` and then removes
    host-side temporary secrets.
-
-For a static network, the community script receives the equivalent of:
-
-```bash
-mode=generated \
-var_ctid='105' \
-var_net='192.168.1.20/24' \
-var_gateway='192.168.1.1' \
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/debian.sh)"
-```
 
 The LXC does not install Docker. On success, the installer prints the CT ID,
 LXC address, and Tunnel origin, for example:
@@ -219,22 +194,15 @@ Rerun the same installation command with a new version for an explicit in-place
 upgrade:
 
 ```bash
-sudo ./install.sh docker --version v0.2.0
+curl -fsSL \
+  https://raw.githubusercontent.com/nberardi/hermes-agent-bridge/refs/heads/main/install.sh \
+  | sudo bash -s -- docker --version v0.2.0
 # Or rerun the native or Proxmox command originally chosen.
 ```
 
 Existing settings become the wizard defaults. Releases are installed under
 `/opt/hermes-agent-bridge`, and a failed health verification rolls the service
 and configuration back. There is no automatic update timer.
-
-The checksum-verified download above is preferred. A secondary convenience
-form is available when curl-pipe-shell is acceptable:
-
-```bash
-curl --fail --location \
-  https://github.com/nberardi/hermes-agent-bridge/releases/download/v0.1.0/install.sh \
-  | sudo bash -s -- native --version v0.1.0
-```
 
 ## Check an installation
 

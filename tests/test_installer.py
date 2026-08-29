@@ -7,6 +7,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "install.sh"
 
@@ -189,14 +191,32 @@ CREATED_CT=""
     assert events.read_text().strip() == "generated|123|10.0.0.20/8|10.0.0.1"
 
 
-def test_readme_proxmox_path_streams_installer_without_clone():
-    readme = (ROOT / "README.md").read_text()
-
-    assert (
-        "https://raw.githubusercontent.com/nberardi/hermes-agent-bridge/refs/heads/main/install.sh"
-        in readme
+@pytest.mark.parametrize("mode", ["docker", "native", "proxmox"])
+def test_installer_runs_from_stdin_for_every_mode(mode):
+    result = subprocess.run(
+        ["bash", "-s", "--", mode, "--help"],
+        input=INSTALLER.read_text(),
+        text=True,
+        capture_output=True,
+        check=False,
     )
+
+    assert result.returncode == 0, result.stderr
+    assert "Usage:" in result.stdout
+
+
+def test_readme_streams_installer_for_every_path_without_clone():
+    readme = (ROOT / "README.md").read_text()
+    installer_url = (
+        "https://raw.githubusercontent.com/nberardi/"
+        "hermes-agent-bridge/refs/heads/main/install.sh"
+    )
+
+    assert readme.count(installer_url) >= 3
+    for mode in ("docker", "native", "proxmox"):
+        assert f"| sudo bash -s -- {mode}" in readme
     assert "git clone" not in readme
+    assert "community-scripts/ProxmoxVE" not in readme
 
 
 def test_release_workflow_guards_version_and_builds_both_architectures():
