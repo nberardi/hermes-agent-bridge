@@ -140,3 +140,11 @@ def test_compose_loads_env_file_not_host_interpolation():
     assert "${CF_ACCESS_AUD:?set" not in text
     assert "${SITE:?set" not in text
     assert "env_file:" in text
+
+
+def test_dev_requirements_are_pinned():
+    text = (ROOT / "requirements-dev.txt").read_text()
+    assert "==" in text
+    assert "ruff==" in text
+    assert "pytest==" in text
+    assert (ROOT / "uv.lock").is_file()

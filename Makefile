@@ -1,4 +1,8 @@
-.PHONY: lint format format-check typecheck test ci
+.PHONY: install lint format format-check typecheck test ci
+
+install:
+	python3 -m pip install -r requirements-dev.txt
+	python3 -m pip install -e .
 
 lint:
 	ruff check src tests
