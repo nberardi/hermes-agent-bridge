@@ -67,6 +67,14 @@ jobs:
             release/SHA256SUMS
           if-no-files-found: error
 
+  # GHCR container packages default to private on first push, and GITHUB_TOKEN
+  # cannot change that: /user/packages/* only accepts a personal access token
+  # authenticated as the package owner, so a GITHUB_TOKEN call 404s even
+  # though the package exists. Set the package to public once, manually, from
+  # its GitHub settings page (Profile > Packages > hermes-agent-bridge >
+  # Package settings > Change visibility); it stays public for every release
+  # after that, so this is a one-time step rather than something to automate
+  # here.
   image:
     needs: assets
     runs-on: ubuntu-latest
@@ -95,10 +103,6 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}:latest
-      - name: Make the package public
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh api --method PATCH /user/packages/container/hermes-agent-bridge -f visibility=public
       - name: Verify anonymous multi-architecture pull metadata
         env:
           IMAGE: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
