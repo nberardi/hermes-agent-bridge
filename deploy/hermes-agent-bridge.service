@@ -1,0 +1,39 @@
+[Unit]
+Description=Hermes Agent MCP Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes-agent-bridge
+Group=hermes-agent-bridge
+EnvironmentFile=@ENV_FILE@
+ExecStart=/opt/hermes-agent-bridge/current/venv/bin/python -m hermes_agent_bridge
+Restart=on-failure
+RestartSec=5s
+WorkingDirectory=/
+UMask=0077
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

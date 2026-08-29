@@ -2,6 +2,53 @@
 
 Streamable HTTP MCP so a remote MCP client can call a self-hosted Hermes **as itself**, over tools, not as a chat bot.
 
+## Choose an installation
+
+Use one installer and one configuration contract in every mode:
+
+| Mode | Choose it when | Tunnel origin after install |
+| --- | --- | --- |
+| `docker` | Hermes and cloudflared already share a Docker network | `http://hermes-agent-bridge:<port>` |
+| `native` | A Debian/Ubuntu systemd host should run the bridge directly | The checked local/LAN `http://<address>:<port>` |
+| `proxmox` | Proxmox VE 8/9 should own a small unprivileged Debian LXC | The checked LXC `http://<address>:<port>` |
+
+Download, verify, and run a release installer (replace `v0.1.0` after later releases):
+
+```bash
+version=v0.1.0
+curl --fail --location --remote-name \
+  "https://github.com/nberardi/hermes-agent-bridge/releases/download/${version}/install.sh"
+curl --fail --location --remote-name \
+  "https://github.com/nberardi/hermes-agent-bridge/releases/download/${version}/SHA256SUMS"
+grep '  install.sh$' SHA256SUMS > install.sh.sha256
+sha256sum --check install.sh.sha256
+chmod +x install.sh
+sudo ./install.sh docker --version "$version"
+# Or: sudo ./install.sh native --version "$version"
+# Or, on a Proxmox VE host: sudo ./install.sh proxmox --version "$version"
+```
+
+The secondary curl-pipe-shell convenience form is:
+
+```bash
+curl --fail --location \
+  https://github.com/nberardi/hermes-agent-bridge/releases/download/v0.1.0/install.sh \
+  | sudo bash -s -- native --version v0.1.0
+```
+
+The guided wizard hides secrets and covers `SITE`, public hostnames,
+`ALLOWED_ORIGINS`, allowed kanban boards, Cloudflare team/AUD, dashboard URL and
+token, optional Ask URL and key, bind address, and bind port. It writes the
+configuration to `/etc/hermes-agent-bridge.env` as root with mode `0600`. Pass
+`--env-file /absolute/path` to use another location. For automation, supply a
+complete env file and add `--non-interactive`.
+
+Rerunning the same command is an explicit in-place upgrade. Existing settings
+are the wizard defaults, release directories are installed atomically under
+`/opt/hermes-agent-bridge`, and the installer rolls the service and
+configuration back when the new version fails its health check. There is no
+automatic update timer.
+
 Hermes stays on the private network. This process sits on the same docker/LAN network as Hermes, talks to it over HTTP internally, and is reached from the internet only through an existing Cloudflare Tunnel + Access pattern. The Hermes agent API is **not** published.
 
 MCP is the first protocol. ACP may come later. This is not `hermes mcp serve`.
@@ -56,53 +103,73 @@ Those are the Cloudflare Access **service token** id/secret. They never go in th
 
 The client must not use localhost, RFC1918, or stdio to reach Hermes. Happy path is the named HTTPS URL only.
 
-## Deploy
+## Installation behavior
 
-Requires **Python 3.12+**. The image and local run both use `python3 -m hermes_agent_bridge`.
+All modes require `SITE`, `PUBLIC_HOSTNAMES`, `HERMES_KANBAN_BOARDS`,
+`CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, and `HERMES_DASHBOARD_URL`. Optional
+settings are `ALLOWED_ORIGINS`, `HERMES_DASHBOARD_TOKEN`, `HERMES_API_URL`,
+`HERMES_API_KEY`, `BIND_HOST`, and `BIND_PORT`. `HERMES_DASHBOARD_TOKEN` is the
+bearer token already expected by the dashboard. Never commit a filled env file.
+The installer limits `BIND_HOST` to wildcard or loopback addresses so its
+loopback-only, unauthenticated liveness check cannot become a network bypass;
+Docker requires a wildcard address to remain reachable on its private network.
 
-One image, env file per site. Copy `deploy/site.env.example` to `/etc/hermes-agent-bridge.env` (or set `HERMES_BRIDGE_ENV` to another path). Fill every **required** key. Do not commit the filled file.
+`PUBLIC_HOSTNAMES` contains DNS hostnames without schemes or paths. Each accepts
+that exact Host value with or without a port. `ALLOWED_ORIGINS` defaults to the
+HTTPS origin of each public hostname. Board slugs contain lowercase letters,
+digits, hyphens, or underscores, begin with a letter or digit, and are at most
+64 characters. Duplicate boards are removed in order.
 
-Required:
-
-- `SITE`
-- `PUBLIC_HOSTNAMES`
-- `HERMES_KANBAN_BOARDS`
-- `CF_ACCESS_TEAM_DOMAIN`
-- `CF_ACCESS_AUD`
-- `HERMES_DASHBOARD_URL`
-
-Optional: `ALLOWED_ORIGINS`, `HERMES_DASHBOARD_TOKEN`, `HERMES_API_URL`, `HERMES_API_KEY`, `BIND_PORT`.
-
-For example, `PUBLIC_HOSTNAMES=mcp.example.com` accepts Host values
-`mcp.example.com` and `mcp.example.com:<port>`. The default
-`ALLOWED_ORIGINS=https://mcp.example.com` can be overridden with a
-comma-separated list such as
-`https://client.example.com,https://admin.example.com`.
-
-Leaving `HERMES_KANBAN_BOARDS`, `CF_ACCESS_AUD`, or `HERMES_DASHBOARD_URL`
-empty fails at process start. Board slugs must contain only lowercase letters,
-digits, hyphens, or underscores, start with a letter or digit, and be at most 64
-characters. Duplicate entries are removed while preserving order. Compose loads
-that file into the container. It does not interpolate those keys from your
-shell.
+Before activation, every installer runs the same preflight used for
+troubleshooting:
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e .
-set -a
-. /etc/hermes-agent-bridge.env
-set +a
-python3 -m hermes_agent_bridge
+/opt/hermes-agent-bridge/current/venv/bin/python \
+  -m hermes_agent_bridge check --env-file /etc/hermes-agent-bridge.env
 ```
 
-```bash
-docker compose -f deploy/compose.yaml up -d --build
-```
+It validates configuration, fetches the Cloudflare Access JWKS, and checks the
+Hermes dashboard. A dashboard failure is fatal. If Ask is configured but its
+gateway is unavailable, the command prints a warning and succeeds so dashboard
+and kanban tools remain usable. Exit codes are `0` for success (including an Ask
+warning), `2` for configuration, `3` for JWKS, and `4` for dashboard failure.
 
-Join the container to the same docker network Hermes already uses (`HERMES_DOCKER_NETWORK`, default `hermes`). Do **not** add `ports:`.
+### Docker Compose
 
-`HERMES_DASHBOARD_TOKEN` is whatever the dashboard REST already expects (session bearer). Do not commit it.
+The installer validates an existing external Docker network shared with Hermes.
+Compose pulls `ghcr.io/nberardi/hermes-agent-bridge:vX.Y.Z`; it never builds a
+floating local image and never publishes a host port. The multi-architecture
+image runs as a numeric non-root user with a read-only filesystem, dropped
+capabilities, and a loopback `/healthz` check. If Docker is absent on Debian or
+Ubuntu, the interactive installer offers Docker Engine and Compose from
+Docker's official apt repository. Other hosts receive exact prerequisites.
+
+### Native Debian or Ubuntu
+
+Native mode supports systemd-based Debian and Ubuntu on amd64 and arm64. It
+installs pinned Python 3.12.11 and locked, hash-verified production dependencies
+inside the versioned release directory, without changing system Python. The
+bridge runs as a dedicated non-login user from a root-owned, non-writable
+application tree under a hardened systemd unit. The underlying runtime command
+remains `python3 -m hermes_agent_bridge` (using the release's private Python).
+
+### Proxmox VE
+
+Run Proxmox mode as root on VE 8 or 9. It discovers template storage, root
+storage, and Linux bridges, prompting only when there is more than one. A new
+install defaults to the next free CT ID, Debian 13 (Debian 12 fallback), 1 CPU,
+1 GiB RAM, 512 MiB swap, a 4 GiB root disk, DHCP on `vmbr0` when available, and
+start-on-boot. Static IPv4 is optional. The container is unprivileged and does
+not enable Docker or nesting.
+
+Configuration crosses the host only in a `0600` temporary file and is pushed
+with `pct push`; host-side secrets are removed after `pct exec` completes the
+native install. `/etc/hermes-agent-bridge-proxmox.conf` records only the CT ID,
+so rerunning Proxmox mode upgrades that LXC instead of creating another one.
+
+Every successful mode ends with the exact Tunnel origin, Access
+application/AUD and two-policy checklist, service-token header names, MCP URL,
+and mode-specific troubleshooting commands.
 
 ## Local tests
 

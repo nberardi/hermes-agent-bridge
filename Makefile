@@ -1,4 +1,4 @@
-.PHONY: install lint format format-check typecheck test ci
+.PHONY: install lint format format-check typecheck test shellcheck ci
 
 install:
 	python3 -m pip install -r requirements-dev.txt
@@ -19,4 +19,7 @@ typecheck:
 test:
 	pytest -q
 
-ci: lint format-check typecheck test
+shellcheck:
+	shellcheck install.sh
+
+ci: lint format-check typecheck test shellcheck

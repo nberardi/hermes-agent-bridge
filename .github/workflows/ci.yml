@@ -18,7 +18,14 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
           python -m pip install -r requirements-dev.txt
           python -m pip install -e .
       - name: CI
         run: make ci
+      - name: Validate Compose
+        env:
+          HERMES_BRIDGE_VERSION: v0.1.0
+          HERMES_BRIDGE_ENV: .env.example
+        run: docker compose -f deploy/compose.yaml config --quiet
