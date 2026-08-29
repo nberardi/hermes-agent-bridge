@@ -2,7 +2,8 @@
 
 Rejects requests that never went through Access, including docker-network
 neighbors. Loopback GET /healthz is the only skip (container HEALTHCHECK).
-MCP, card-create, and health-as-a-tool still require a JWT even on localhost.
+Forwarded client IPs are never treated as loopback. MCP still requires a JWT
+even on localhost.
 """
 
 from __future__ import annotations
@@ -19,9 +20,20 @@ log = logging.getLogger(__name__)
 
 JWT_HEADER = "cf-access-jwt-assertion"
 _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+_FORWARD_HEADERS = {b"x-forwarded-for", b"x-real-ip", b"forwarded"}
 
 
-def _is_loopback(scope: Scope) -> bool:
+def _has_forwarded_client(scope: Scope) -> bool:
+    for key, _value in scope.get("headers") or []:
+        if key.lower() in _FORWARD_HEADERS:
+            return True
+    return False
+
+
+def _is_direct_loopback(scope: Scope) -> bool:
+    """True only for a raw socket peer on loopback, with no forwarded-client headers."""
+    if _has_forwarded_client(scope):
+        return False
     client = scope.get("client")
     if not client:
         return False
@@ -53,8 +65,9 @@ class AccessJWTMiddleware:
         if path in self.skip_paths:
             await self.app(scope, receive, send)
             return
-        # Container liveness only. Neighbors on the docker network still need a JWT.
-        if path == "/healthz" and _is_loopback(scope):
+        # Container liveness only. Neighbors, and anyone sending X-Forwarded-For,
+        # still need a JWT. /mcp is never skipped.
+        if path == "/healthz" and _is_direct_loopback(scope):
             await self.app(scope, receive, send)
             return
         headers = {
