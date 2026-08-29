@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 from starlette.applications import Starlette
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
-from starlette.types import Receive, Scope, Send
+from starlette.types import Scope
 
 from hermes_agent_bridge.access import AccessJWTMiddleware
 
@@ -34,7 +34,7 @@ class _StubJWK:
 
 
 def _token(*, aud: str = THIS_AUD, exp_delta: timedelta = timedelta(hours=1), extra: dict | None = None) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "aud": aud,
         "iss": TEAM_ISS,

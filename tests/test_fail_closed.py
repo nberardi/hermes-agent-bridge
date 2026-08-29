@@ -17,19 +17,19 @@ ROOT = Path(__file__).resolve().parents[1]
 def _settings(**overrides):
     from hermes_agent_bridge.config import Settings
 
-    base = dict(
-        bind_host="127.0.0.1",
-        bind_port=8080,
-        public_hostnames=["mcp.example.com"],
-        cf_team_domain="example.cloudflareaccess.com",
-        cf_aud="test-aud",
-        dashboard_url="http://hermes.internal:9119",
-        dashboard_token="dash-token",
-        api_url="",
-        api_key="",
-        kanban_board="",
-        site="vienna",
-    )
+    base = {
+        "bind_host": "127.0.0.1",
+        "bind_port": 8080,
+        "public_hostnames": ["mcp.example.com"],
+        "cf_team_domain": "example.cloudflareaccess.com",
+        "cf_aud": "test-aud",
+        "dashboard_url": "http://hermes.internal:9119",
+        "dashboard_token": "dash-token",
+        "api_url": "",
+        "api_key": "",
+        "kanban_board": "",
+        "site": "site1",
+    }
     base.update(overrides)
     return Settings(**base)
 
@@ -43,7 +43,7 @@ def test_compose_does_not_publish_a_host_port():
     assert "0.0.0.0" not in body
     assert "host_ip" not in body
     dockerfile = (ROOT / "Dockerfile").read_text()
-    assert not re.search(r"(?m)^\s*EXPOSE\b", dockerfile, re.I)
+    assert not re.search(r"(?m)^\s*EXPOSE\b", dockerfile, re.IGNORECASE)
 
 
 def test_examples_do_not_embed_credentials():
@@ -52,7 +52,7 @@ def test_examples_do_not_embed_credentials():
         if "=" not in line or line.strip().startswith("#"):
             continue
         key, _, val = line.partition("=")
-        if key.endswith("AUD") or key.endswith("TOKEN") or key.endswith("KEY"):
+        if key.endswith(("AUD", "TOKEN", "KEY")):
             assert val.strip() == "", line
 
 

@@ -10,19 +10,19 @@ from hermes_agent_bridge.hermes import HermesClient, HermesError
 
 
 def _settings(**overrides) -> Settings:
-    base = dict(
-        bind_host="0.0.0.0",
-        bind_port=8080,
-        public_hostnames=["mcp.example.com"],
-        cf_team_domain="example.cloudflareaccess.com",
-        cf_aud="test-aud",
-        dashboard_url="http://hermes.internal:9119",
-        dashboard_token="dash-token",
-        api_url="",
-        api_key="",
-        kanban_board="",
-        site="vienna",
-    )
+    base = {
+        "bind_host": "0.0.0.0",
+        "bind_port": 8080,
+        "public_hostnames": ["mcp.example.com"],
+        "cf_team_domain": "example.cloudflareaccess.com",
+        "cf_aud": "test-aud",
+        "dashboard_url": "http://hermes.internal:9119",
+        "dashboard_token": "dash-token",
+        "api_url": "",
+        "api_key": "",
+        "kanban_board": "",
+        "site": "site1",
+    }
     base.update(overrides)
     return Settings(**base)
 
