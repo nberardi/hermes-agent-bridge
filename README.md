@@ -262,9 +262,10 @@ These rules describe what the installation protects:
   `401`.
 - Docker does not publish a host port. Cloudflare reaches the bridge through
   the private Docker network.
-- Loopback `GET /healthz` reports liveness only. It does not call Hermes, and
-  its loopback exception cannot be used by forwarded requests or network
-  neighbors.
+- Docker and the installer call `GET /healthz` locally to confirm that the
+  bridge process started and is listening after a deployment or restart. It
+  does not call Hermes; use the MCP `health` tool for that. Only a direct
+  loopback request can call `/healthz` without a JWT.
 - The supported MCP endpoint is the Access-protected HTTPS hostname, not a
   localhost, private-address, or stdio shortcut.
 - A failure of the optional Ask gateway does not disable dashboard or kanban
