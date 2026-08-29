@@ -215,6 +215,7 @@ def test_readme_streams_installer_for_every_path_without_clone():
     assert readme.count(installer_url) >= 3
     for mode in ("docker", "native", "proxmox"):
         assert f"| sudo bash -s -- {mode}" in readme
+    assert "--version v0.2.0" not in readme
     assert "git clone" not in readme
     assert "community-scripts/ProxmoxVE" not in readme
 

@@ -190,13 +190,13 @@ letter or digit, and are at most 64 characters.
 Use another absolute configuration path with `--env-file PATH`. For automation,
 provide a complete env file and add `--non-interactive`.
 
-Rerun the same installation command with a new version for an explicit in-place
-upgrade:
+To upgrade, rerun the same installation command. The installer uses its current
+release by default:
 
 ```bash
 curl -fsSL \
   https://raw.githubusercontent.com/nberardi/hermes-agent-bridge/refs/heads/main/install.sh \
-  | sudo bash -s -- docker --version v0.2.0
+  | sudo bash -s -- docker
 # Or rerun the native or Proxmox command originally chosen.
 ```
 
