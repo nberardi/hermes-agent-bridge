@@ -8,7 +8,7 @@ MCP, card-create, and health-as-a-tool still require a JWT even on localhost.
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from collections.abc import Iterable
 
 import jwt
 from jwt import PyJWKClient
