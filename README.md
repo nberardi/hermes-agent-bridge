@@ -94,9 +94,12 @@ Join the container to the same docker network Hermes already uses (`HERMES_DOCKE
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e '.[dev]'
+python3 -m pip install -r requirements-dev.txt
+python3 -m pip install -e .
 make ci
 ```
+
+Install from `requirements-dev.txt` (pinned, hashed). `uv.lock` is the source of truth; regenerate with `uv lock && uv export --extra dev --frozen --no-emit-project -o requirements-dev.txt`.
 
 `make ci` is what GitHub Actions runs: `ruff check`, `ruff format --check`, `mypy src`, `pytest`.
 
