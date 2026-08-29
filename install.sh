@@ -8,6 +8,7 @@ readonly IMAGE_REPOSITORY="ghcr.io/nberardi/hermes-agent-bridge"
 readonly INSTALL_ROOT="/opt/hermes-agent-bridge"
 readonly DEFAULT_ENV_FILE="/etc/hermes-agent-bridge.env"
 readonly PROXMOX_STATE="/etc/hermes-agent-bridge-proxmox.conf"
+readonly DEBIAN_LXC_SCRIPT="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/debian.sh"
 readonly UV_VERSION="0.8.15"
 readonly PYTHON_VERSION="3.12.11"
 
@@ -505,26 +506,6 @@ install_native() {
     printf '\nCloudflare Tunnel origin: %s\n' "$(native_origin)"
 }
 
-choose_one() {
-    local label="$1"
-    shift
-    local -a choices=("$@")
-    local choice answer="" candidate found=0
-    [[ ${#choices[@]} -gt 0 ]] || die "no $label found"
-    choice="${choices[0]}"
-    if [[ ${#choices[@]} -gt 1 && $NON_INTERACTIVE -eq 0 ]]; then
-        printf 'Available %s:\n' "$label" >&2
-        printf '  %s\n' "${choices[@]}" >&2
-        read -r -p "$label [$choice]: " answer
-        [[ -z "$answer" ]] || choice="$answer"
-        for candidate in "${choices[@]}"; do
-            [[ "$candidate" == "$choice" ]] && found=1
-        done
-        [[ $found -eq 1 ]] || die "invalid $label: $choice"
-    fi
-    printf '%s\n' "$choice"
-}
-
 proxmox_version_check() {
     local major
     command -v pct >/dev/null 2>&1 || die "proxmox mode must run on a Proxmox VE host"
@@ -548,35 +529,20 @@ next_ctid() {
     die "could not find a free container ID"
 }
 
-discover_bridges() {
-    ip -o link show type bridge | awk -F': ' '{print $2}' | cut -d@ -f1 | \
-        awk '$0 == "vmbr0" {preferred=$0; next} {others[++n]=$0} END {if (preferred) print preferred; for (i=1; i<=n; i++) print others[i]}'
-}
-
-select_template() {
-    local template
-    pveam update
-    template="$(pveam available --section system | awk '/debian-13-standard/ {print $2; exit}')"
-    if [[ -z "$template" ]]; then
-        template="$(pveam available --section system | awk '/debian-12-standard/ {print $2; exit}')"
-    fi
-    [[ -n "$template" ]] || die "no Debian 13 or Debian 12 LXC template is available"
-    printf '%s\n' "$template"
-}
-
-container_network() {
-    local bridge="$1" answer="" address gateway
-    if [[ $NON_INTERACTIVE -eq 0 ]]; then
-        read -r -p "Use a static LXC address instead of DHCP? [y/N] " answer
-    fi
-    if [[ "$answer" =~ ^[Yy]$ ]]; then
-        read -r -p "Static IPv4/CIDR (for example 192.0.2.20/24): " address
-        read -r -p "IPv4 gateway: " gateway
-        [[ "$address" == */* && -n "$gateway" ]] || die "static address and gateway are required"
-        printf 'name=eth0,bridge=%s,ip=%s,gw=%s' "$bridge" "$address" "$gateway"
+create_debian_lxc() {
+    local ctid="$1" network="$2" gateway="$3" script
+    log "Creating Debian LXC $ctid with the Proxmox community script"
+    script="$(curl --fail --silent --show-error --location "$DEBIAN_LXC_SCRIPT")"
+    [[ -n "$script" ]] || die "the Proxmox Debian community script was empty"
+    CREATED_CT="$ctid"
+    if [[ "$network" == dhcp ]]; then
+        mode=generated var_ctid="$ctid" bash -c "$script"
     else
-        printf 'name=eth0,bridge=%s,ip=dhcp' "$bridge"
+        mode=generated var_ctid="$ctid" var_net="$network" \
+            var_gateway="$gateway" bash -c "$script"
     fi
+    pct status "$ctid" >/dev/null 2>&1 || \
+        die "the community script did not create LXC $ctid"
 }
 
 wait_container_network() {
@@ -597,9 +563,9 @@ destroy_failed_container() {
 }
 
 install_proxmox() {
-    local ctid="" template template_storage root_storage bridge net0 lxc_env original_env=""
+    local ctid="" lxc_env original_env="" network="${var_net:-dhcp}"
+    local gateway="${var_gateway:-}" static_answer="" requested=""
     local host_env="$ENV_FILE"
-    local -a template_storages root_storages bridges
     proxmox_version_check
     if [[ -f "$PROXMOX_STATE" ]]; then
         # shellcheck source=/dev/null
@@ -622,28 +588,32 @@ install_proxmox() {
         write_config "$lxc_env"
         log "Upgrading existing Hermes bridge LXC $ctid"
     else
-        ctid="$(next_ctid)"
+        ctid="${var_ctid:-$(next_ctid)}"
         if [[ $NON_INTERACTIVE -eq 0 ]]; then
-            local requested=""
             read -r -p "Container ID [$ctid]: " requested
             [[ -z "$requested" ]] || ctid="$requested"
+            if [[ "$network" == dhcp ]]; then
+                read -r -p "Use a static IPv4 address instead of DHCP? [y/N] " static_answer
+                if [[ "$static_answer" =~ ^[Yy]$ ]]; then
+                    read -r -p "Static IPv4/CIDR (for example 10.0.0.20/8): " network
+                    read -r -p "IPv4 gateway (for example 10.0.0.1): " gateway
+                fi
+            else
+                read -r -p "Static IPv4/CIDR [$network]: " requested
+                [[ -z "$requested" ]] || network="$requested"
+                read -r -p "IPv4 gateway [$gateway]: " requested
+                [[ -z "$requested" ]] || gateway="$requested"
+            fi
         fi
+        [[ "$ctid" =~ ^[1-9][0-9]*$ ]] || die "container ID must be a positive integer"
         pct status "$ctid" >/dev/null 2>&1 && die "container ID $ctid is already in use"
-        mapfile -t template_storages < <(pvesm status --content vztmpl | awk 'NR > 1 && $3 == "active" {print $1}')
-        mapfile -t root_storages < <(pvesm status --content rootdir | awk 'NR > 1 && $3 == "active" {print $1}')
-        mapfile -t bridges < <(discover_bridges)
-        template_storage="$(choose_one "template storage" "${template_storages[@]}")"
-        root_storage="$(choose_one "root storage" "${root_storages[@]}")"
-        bridge="$(choose_one "network bridge" "${bridges[@]}")"
-        template="$(select_template)"
-        pveam download "$template_storage" "$template"
-        net0="$(container_network "$bridge")"
-        log "Creating unprivileged Debian LXC $ctid"
-        pct create "$ctid" "${template_storage}:vztmpl/${template}" \
-            --hostname hermes-agent-bridge --unprivileged 1 --onboot 1 \
-            --cores 1 --memory 1024 --swap 512 --rootfs "${root_storage}:4" \
-            --net0 "$net0" --start 1
-        CREATED_CT="$ctid"
+        if [[ "$network" != dhcp ]]; then
+            [[ "$network" == */* ]] || die "static network must be an IPv4 address with CIDR prefix"
+            [[ -n "$gateway" ]] || die "a gateway is required with a static network"
+        else
+            gateway=""
+        fi
+        create_debian_lxc "$ctid" "$network" "$gateway"
         lxc_env="$TEMP_DIR/container.env"
         ENV_FILE="$lxc_env"
         if [[ -f "$host_env" ]]; then
@@ -710,12 +680,22 @@ EOF
 }
 
 main() {
+    local source_path
     parse_args "$@"
-    SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
-    SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-    readonly SCRIPT_PATH SCRIPT_DIR
     TEMP_DIR="$(mktemp -d /tmp/hermes-agent-bridge.XXXXXX)"
     chmod 0700 "$TEMP_DIR"
+    source_path="${BASH_SOURCE[0]:-}"
+    if [[ -n "$source_path" && -f "$source_path" ]]; then
+        SCRIPT_PATH="$(readlink -f "$source_path")"
+    else
+        SCRIPT_PATH="$TEMP_DIR/hermes-agent-bridge-install.sh"
+        download \
+            "https://raw.githubusercontent.com/${RELEASE_REPOSITORY}/refs/heads/main/install.sh" \
+            "$SCRIPT_PATH"
+        chmod 0755 "$SCRIPT_PATH"
+    fi
+    SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+    readonly SCRIPT_PATH SCRIPT_DIR
 
     if [[ "$MODE" == proxmox ]]; then
         install_proxmox

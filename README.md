@@ -35,10 +35,11 @@ Have these values ready:
 Cloudflare Tunnel and Access must already exist. The installer does not create
 or change them, your firewall, or router/NAT rules.
 
-### Download and verify the installer
+### Download and verify the installer for Docker or native Linux
 
-Run this on the host where you chose to install: the Docker host, the native
-Linux host, or the Proxmox VE host.
+Run this on the Docker host or native Linux host. If you chose Proxmox, skip
+this download and continue to Option C, which streams the installer directly
+from GitHub.
 
 ```bash
 version=v0.1.0
@@ -51,7 +52,7 @@ sha256sum --check install.sh.sha256
 chmod +x install.sh
 ```
 
-Now follow exactly one of the next three sections.
+Now follow Option A or Option B. Proxmox users start at Option C instead.
 
 ### Option A: Docker
 
@@ -115,28 +116,45 @@ Python installed for that release.
 ### Option C: Proxmox
 
 Use this on a Proxmox VE 8 or 9 host when you want a dedicated LXC. Do not
-create the LXC first and do not install Docker inside it.
+clone this repository, create the LXC first, or install Docker inside it.
 
-Run on the Proxmox VE host:
+Run this directly on the Proxmox VE host:
 
 ```bash
-sudo ./install.sh proxmox --version v0.1.0
+curl -fsSL \
+  https://raw.githubusercontent.com/nberardi/hermes-agent-bridge/refs/heads/main/install.sh \
+  | sudo bash -s -- proxmox
 ```
 
 The installer:
 
-1. Finds template storage, root storage, network bridges, and the next free CT
-   ID. It prompts only when there is more than one valid choice.
-2. Uses Debian 13 when available, with Debian 12 as a fallback.
-3. Creates an unprivileged LXC with 1 CPU, 1 GiB RAM, 512 MiB swap, a 4 GiB
-   root disk, DHCP on `vmbr0` by default, and start-on-boot. Static IPv4 is
-   optional.
+1. Suggests the next free CT ID. Press Enter to accept it or enter another
+   unused ID.
+2. Uses DHCP by default. If you choose static networking, it asks for the LXC
+   IP/CIDR and gateway.
+3. Creates the unprivileged Debian LXC with the Proxmox Community Scripts
+   generated-mode installer.
 4. Transfers configuration through a protected temporary file.
 5. Runs the native installer inside the LXC with `pct exec` and then removes
    host-side temporary secrets.
 
-The LXC does not enable nesting or Docker. On success, the installer prints the
-CT ID, LXC address, and Tunnel origin, for example:
+For a static network, the community script receives the equivalent of:
+
+```bash
+mode=generated \
+var_ctid='X' \
+var_net='10.0.0.20/8' \
+var_gateway='10.0.0.1' \
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/debian.sh)"
+```
+
+Replace `X`, the IP/CIDR, and the gateway when prompted. The upstream script
+uses `var_net` for the IP/CIDR itself; a separate `var_net=static` assignment is
+not required. `10.0.0.20/8` is an example usable host address, whereas
+`10.0.0.0/8` denotes the subnet address.
+
+The LXC does not install Docker. On success, the installer prints the CT ID,
+LXC address, and Tunnel origin, for example:
 
 ```text
 LXC address: 192.0.2.30
