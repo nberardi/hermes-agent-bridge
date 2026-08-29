@@ -15,7 +15,7 @@ python3 -m pip install -e .
 
 Runtime (after required env is filled): `python3 -m hermes_agent_bridge`.
 
-Required env: `SITE`, `PUBLIC_HOSTNAMES`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `HERMES_DASHBOARD_URL`. Copy `deploy/site.env.example`; do not commit the filled file.
+Required env: `SITE`, `PUBLIC_HOSTNAMES`, `HERMES_KANBAN_BOARDS`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `HERMES_DASHBOARD_URL`. Copy `deploy/site.env.example`; do not commit the filled file.
 
 ## Test and lint
 

@@ -10,16 +10,26 @@ Setup (hostnames, Access team, dashboard URL, tokens) lives in env on the host, 
 
 ## What the bridge exposes
 
-Tools (all go to this site's Hermes over the private network):
+Tools:
 
 - `health` — dashboard reachability (and the optional ask gateway if configured)
-- `list_board` / `get_task` — kanban reads
-- `create_queued_card` — `POST /api/plugins/kanban/tasks` with `triage: true` and **no assignee**. Hermes does not dispatch that. There is **no** tool that approves a card, sets `ready`/`running`, calls `specify` / `decompose` / `dispatch`, or hits `/v1/runs/.../approval`.
+- `list_allowed_boards` — configured board slugs this deployment authorizes. This is local configuration and does not query Hermes.
+- `list_board(board)` / `get_task(board, task_id)` — kanban reads on an explicitly selected allowed board
+- `create_queued_card(board, title, body)` — `POST /api/plugins/kanban/tasks?board=<board>` with `triage: true` and **no assignee**. Hermes does not dispatch that. There is **no** tool that approves a card, sets `ready`/`running`, calls `specify` / `decompose` / `dispatch`, or hits `/v1/runs/.../approval`.
 - `ask` — one-shot `POST /v1/chat/completions` on the internal OpenAI-compatible gateway. If `HERMES_API_URL` is unset or that gateway is down, `ask` is disabled; everything else still works. The ask gateway is **not** published.
 
 Vault: there is no stable in-tree vault plugin route this cut can call. Kanban is the write surface.
 
 `PUBLIC_HOSTNAMES` must include the tunnel hostname so the MCP SDK does not 421.
+Each entry allows that exact hostname both without a port and with any port.
+`ALLOWED_ORIGINS` is an optional comma-separated list of browser Origins. It
+defaults to the HTTPS Origin for each public hostname; set it explicitly when a
+different browser Origin must call the MCP endpoint.
+
+`HERMES_KANBAN_BOARDS` is a required comma-separated allowlist. Every kanban
+tool call requires an explicit `board`, and the bridge rejects a board not in
+that list before contacting Hermes. `list_allowed_boards` exposes only this
+configured list; the bridge does not discover or expose other Hermes boards.
 
 ## Cloudflare (existing pattern; no new product)
 
@@ -56,13 +66,25 @@ Required:
 
 - `SITE`
 - `PUBLIC_HOSTNAMES`
+- `HERMES_KANBAN_BOARDS`
 - `CF_ACCESS_TEAM_DOMAIN`
 - `CF_ACCESS_AUD`
 - `HERMES_DASHBOARD_URL`
 
-Optional: `HERMES_DASHBOARD_TOKEN`, `HERMES_API_URL`, `HERMES_API_KEY`, `HERMES_KANBAN_BOARD`, `BIND_PORT`.
+Optional: `ALLOWED_ORIGINS`, `HERMES_DASHBOARD_TOKEN`, `HERMES_API_URL`, `HERMES_API_KEY`, `BIND_PORT`.
 
-Leaving `CF_ACCESS_AUD` or `HERMES_DASHBOARD_URL` empty (as in the sample) fails at process start with `{NAME} is required`. Compose loads that file into the container. It does not interpolate those keys from your shell.
+For example, `PUBLIC_HOSTNAMES=mcp.example.com` accepts Host values
+`mcp.example.com` and `mcp.example.com:<port>`. The default
+`ALLOWED_ORIGINS=https://mcp.example.com` can be overridden with a
+comma-separated list such as
+`https://client.example.com,https://admin.example.com`.
+
+Leaving `HERMES_KANBAN_BOARDS`, `CF_ACCESS_AUD`, or `HERMES_DASHBOARD_URL`
+empty fails at process start. Board slugs must contain only lowercase letters,
+digits, hyphens, or underscores, start with a letter or digit, and be at most 64
+characters. Duplicate entries are removed while preserving order. Compose loads
+that file into the container. It does not interpolate those keys from your
+shell.
 
 ```bash
 python3 -m venv .venv
@@ -109,4 +131,6 @@ Tests cover fail-closed origin checks: JWT missing/empty/garbage/expired/wrong-A
 
 ## Done when
 
-An MCP client can add the Access-protected HTTPS MCP URL and call `health` or `ask` or `create_queued_card` against Hermes, **and** unauthenticated origin calls are rejected.
+An MCP client can add the Access-protected HTTPS MCP URL and call `health`,
+`ask`, or `create_queued_card` with an explicitly allowed board against Hermes,
+**and** unauthenticated origin calls are rejected.
