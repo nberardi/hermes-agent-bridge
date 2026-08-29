@@ -32,7 +32,9 @@ class HermesError(RuntimeError):
 
 
 class HermesClient:
-    def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
+    def __init__(
+        self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None
+    ):
         self._s = settings
         headers = {}
         if settings.dashboard_token:
@@ -66,7 +68,9 @@ class HermesClient:
             if needle in lowered:
                 raise HermesError(f"refusing to call Hermes path {path}")
 
-    async def dashboard_get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+    async def dashboard_get(
+        self, path: str, params: dict[str, Any] | None = None
+    ) -> Any:
         self._guard(path)
         r = await self._http.get(path, params=params)
         r.raise_for_status()
@@ -79,7 +83,11 @@ class HermesClient:
         return r.json() if r.content else None
 
     async def health(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"site": self._s.site, "dashboard": "unknown", "ask": "disabled"}
+        out: dict[str, Any] = {
+            "site": self._s.site,
+            "dashboard": "unknown",
+            "ask": "disabled",
+        }
         try:
             r = await self._http.get("/api/health")
             if r.status_code == 404:
@@ -102,7 +110,9 @@ class HermesClient:
         return {}
 
     async def list_board(self) -> Any:
-        return await self.dashboard_get(f"{KANBAN}/board", params=self._board_params() or None)
+        return await self.dashboard_get(
+            f"{KANBAN}/board", params=self._board_params() or None
+        )
 
     async def get_task(self, task_id: str) -> Any:
         return await self.dashboard_get(f"{KANBAN}/tasks/{task_id}")

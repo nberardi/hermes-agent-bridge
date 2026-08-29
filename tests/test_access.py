@@ -33,7 +33,12 @@ class _StubJWK:
         return _Key()
 
 
-def _token(*, aud: str = THIS_AUD, exp_delta: timedelta = timedelta(hours=1), extra: dict | None = None) -> str:
+def _token(
+    *,
+    aud: str = THIS_AUD,
+    exp_delta: timedelta = timedelta(hours=1),
+    extra: dict | None = None,
+) -> str:
     now = datetime.now(UTC)
     payload = {
         "aud": aud,
@@ -49,7 +54,9 @@ def _app() -> Starlette:
     async def ok(_request):
         return PlainTextResponse("ok")
 
-    app = Starlette(routes=[Route("/mcp", ok, methods=["GET", "POST"]), Route("/healthz", ok)])
+    app = Starlette(
+        routes=[Route("/mcp", ok, methods=["GET", "POST"]), Route("/healthz", ok)]
+    )
     app.add_middleware(
         AccessJWTMiddleware,
         jwks_url=f"{TEAM_ISS}/cdn-cgi/access/certs",
@@ -75,7 +82,9 @@ def test_empty_jwt_is_401():
 
 
 def test_garbage_jwt_is_401():
-    r = TestClient(_app()).post("/mcp", headers={"Cf-Access-Jwt-Assertion": "not-a-jwt"})
+    r = TestClient(_app()).post(
+        "/mcp", headers={"Cf-Access-Jwt-Assertion": "not-a-jwt"}
+    )
     assert r.status_code == 401
     assert "invalid" in r.json()["error"].lower()
 
@@ -148,7 +157,13 @@ def test_loopback_healthz_without_jwt_is_ok():
     assert asyncio.run(_call()) == 200
 
 
-def _status_for(*, path: str, method: str = "GET", client: tuple[str, int], headers: list[tuple[bytes, bytes]] | None = None) -> int:
+def _status_for(
+    *,
+    path: str,
+    method: str = "GET",
+    client: tuple[str, int],
+    headers: list[tuple[bytes, bytes]] | None = None,
+) -> int:
     inner = Starlette(
         routes=[
             Route("/healthz", lambda r: PlainTextResponse("ok")),
@@ -198,20 +213,37 @@ def test_forwarded_loopback_on_healthz_is_401():
     """X-Forwarded-For must not count as loopback, even if the socket looks local."""
     headers = [(b"x-forwarded-for", b"127.0.0.1")]
     # Neighbor socket + spoofed XFF
-    assert _status_for(path="/healthz", client=("203.0.113.10", 9), headers=headers) == 401
+    assert (
+        _status_for(path="/healthz", client=("203.0.113.10", 9), headers=headers) == 401
+    )
     # uvicorn proxy_headers rewrite: client becomes 127.0.0.1 but XFF remains
     assert _status_for(path="/healthz", client=("127.0.0.1", 9), headers=headers) == 401
 
 
 def test_forwarded_loopback_on_mcp_is_401():
     headers = [(b"x-forwarded-for", b"127.0.0.1")]
-    assert _status_for(path="/mcp", method="POST", client=("203.0.113.10", 9), headers=headers) == 401
-    assert _status_for(path="/mcp", method="POST", client=("127.0.0.1", 9), headers=headers) == 401
+    assert (
+        _status_for(
+            path="/mcp", method="POST", client=("203.0.113.10", 9), headers=headers
+        )
+        == 401
+    )
+    assert (
+        _status_for(
+            path="/mcp", method="POST", client=("127.0.0.1", 9), headers=headers
+        )
+        == 401
+    )
 
 
 def test_uvicorn_does_not_trust_proxy_headers():
     from pathlib import Path
 
-    src = (Path(__file__).resolve().parents[1] / "src" / "hermes_agent_bridge" / "server.py").read_text()
+    src = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "hermes_agent_bridge"
+        / "server.py"
+    ).read_text()
     assert "proxy_headers=True" not in src
     assert "proxy_headers=False" in src
