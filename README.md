@@ -95,8 +95,10 @@ Join the container to the same docker network Hermes already uses (`HERMES_DOCKE
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -e '.[dev]'
-pytest
+make ci
 ```
+
+`make ci` is what GitHub Actions runs: `ruff check`, `ruff format --check`, `mypy src`, `pytest`.
 
 Tests cover fail-closed origin checks: JWT missing/empty/garbage/expired/wrong-AUD, no host publish, queue-only tools, ask disabled without hang.
 

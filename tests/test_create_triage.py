@@ -33,11 +33,15 @@ async def test_create_triage_posts_unassigned_triage_only():
 
     async def handler(request: httpx.Request) -> httpx.Response:
         posted["url"] = str(request.url)
-        posted["json"] = httpx.Request(request.method, request.url, content=request.content).read()
+        posted["json"] = httpx.Request(
+            request.method, request.url, content=request.content
+        ).read()
         import json
 
         posted["body"] = json.loads(request.content.decode())
-        return httpx.Response(200, json={"id": "t1", "triage": True, "status": "triage"})
+        return httpx.Response(
+            200, json={"id": "t1", "triage": True, "status": "triage"}
+        )
 
     transport = httpx.MockTransport(handler)
     client = HermesClient(_settings(), transport=transport)

@@ -37,7 +37,9 @@ def _settings(**overrides):
 def test_compose_does_not_publish_a_host_port():
     text = (ROOT / "deploy" / "compose.yaml").read_text()
     # keys only; comments may mention what not to do
-    keys = [ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    keys = [
+        ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")
+    ]
     body = "\n".join(keys)
     assert re.search(r"(?m)^\s*ports\s*:", body) is None
     assert "0.0.0.0" not in body
@@ -63,7 +65,15 @@ async def test_tools_are_queue_only():
     assert "create_queued_card" in names
     assert "health" in names
     assert "ask" in names
-    forbidden = ("approv", "promote", "dispatch", "specify", "decompose", "running", "ready")
+    forbidden = (
+        "approv",
+        "promote",
+        "dispatch",
+        "specify",
+        "decompose",
+        "running",
+        "ready",
+    )
     joined = " ".join(sorted(names)).lower()
     for needle in forbidden:
         assert needle not in joined, names
