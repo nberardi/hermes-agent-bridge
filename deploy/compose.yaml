@@ -7,21 +7,23 @@
 # process start.
 services:
   hermes-agent-bridge:
-    build:
-      context: ..
-    image: hermes-agent-bridge:local
+    image: ghcr.io/nberardi/hermes-agent-bridge:${HERMES_BRIDGE_VERSION:?set release version}
+    container_name: hermes-agent-bridge
     restart: unless-stopped
     env_file:
       - path: ${HERMES_BRIDGE_ENV:-/etc/hermes-agent-bridge.env}
         required: true
-    environment:
-      BIND_PORT: "8080"
+        format: raw
     # No ports: key. Do not publish a host port. cloudflared reaches this over docker DNS.
     networks:
       - hermes
     read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     tmpfs:
-      - /tmp
+      - /tmp:rw,noexec,nosuid,size=16m
 
 networks:
   hermes:
