@@ -1,0 +1,26 @@
+[project]
+name = "hermes-agent-bridge"
+version = "0.1.0"
+description = "Streamable HTTP MCP bridge to a private-network Hermes"
+requires-python = ">=3.12"
+dependencies = [
+  "mcp>=2.0.0,<3",
+  "httpx>=0.28.0",
+  "pyjwt[crypto]>=2.10.0",
+  "starlette>=0.46.0",
+  "uvicorn>=0.34.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3.0", "pytest-asyncio>=0.25.0"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["src"]

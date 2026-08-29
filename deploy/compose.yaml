@@ -1,0 +1,34 @@
+# One compose file, one or more sites. Secrets via env file on the host, never git.
+# cloudflared already runs at each site; point a public hostname at this service
+# on the docker network. Do not publish BIND_PORT on the host.
+services:
+  hermes-agent-bridge:
+    build:
+      context: ..
+    image: hermes-agent-bridge:local
+    restart: unless-stopped
+    env_file:
+      - path: /etc/hermes-agent-bridge.env
+        required: false
+    environment:
+      BIND_PORT: "8080"
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:?set CF_ACCESS_TEAM_DOMAIN}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:?set CF_ACCESS_AUD}
+      PUBLIC_HOSTNAMES: ${PUBLIC_HOSTNAMES:?set PUBLIC_HOSTNAMES}
+      HERMES_DASHBOARD_URL: ${HERMES_DASHBOARD_URL:?set HERMES_DASHBOARD_URL}
+      HERMES_DASHBOARD_TOKEN: ${HERMES_DASHBOARD_TOKEN:-}
+      HERMES_API_URL: ${HERMES_API_URL:-}
+      HERMES_API_KEY: ${HERMES_API_KEY:-}
+      HERMES_KANBAN_BOARD: ${HERMES_KANBAN_BOARD:-}
+      SITE: ${SITE:?set SITE}
+    # No ports: key. Do not publish a host port. cloudflared reaches this over docker DNS.
+    networks:
+      - hermes
+    read_only: true
+    tmpfs:
+      - /tmp
+
+networks:
+  hermes:
+    external: true
+    name: ${HERMES_DOCKER_NETWORK:-hermes}
