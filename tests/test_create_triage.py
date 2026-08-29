@@ -14,13 +14,14 @@ def _settings(**overrides) -> Settings:
         "bind_host": "0.0.0.0",
         "bind_port": 8080,
         "public_hostnames": ["mcp.example.com"],
+        "allowed_origins": ["https://mcp.example.com"],
         "cf_team_domain": "example.cloudflareaccess.com",
         "cf_aud": "test-aud",
         "dashboard_url": "http://hermes.internal:9119",
         "dashboard_token": "dash-token",
         "api_url": "",
         "api_key": "",
-        "kanban_board": "",
+        "allowed_kanban_boards": ["project-a", "project-b"],
         "site": "site1",
     }
     base.update(overrides)
@@ -28,7 +29,7 @@ def _settings(**overrides) -> Settings:
 
 
 @pytest.mark.asyncio
-async def test_create_triage_posts_unassigned_triage_only():
+async def test_create_triage_on_allowed_board_is_unassigned_triage_only():
     posted = {}
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -45,10 +46,12 @@ async def test_create_triage_posts_unassigned_triage_only():
 
     transport = httpx.MockTransport(handler)
     client = HermesClient(_settings(), transport=transport)
-    result = await client.create_queued_card("do a thing", "details")
+    result = await client.create_queued_card("project-a", "do a thing", "details")
     await client.aclose()
 
-    assert posted["url"].endswith("/api/plugins/kanban/tasks")
+    url = httpx.URL(posted["url"])
+    assert url.path == "/api/plugins/kanban/tasks"
+    assert dict(url.params) == {"board": "project-a"}
     body = posted["body"]
     assert body["triage"] is True
     assert body["title"] == "do a thing"
@@ -57,6 +60,45 @@ async def test_create_triage_posts_unassigned_triage_only():
     assert "ready" not in str(body).lower()
     assert "running" not in str(body).lower()
     assert result["id"] == "t1"
+
+
+@pytest.mark.asyncio
+async def test_rejects_disallowed_board_before_request():
+    requested = False
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal requested
+        requested = True
+        return httpx.Response(500)
+
+    client = HermesClient(
+        _settings(),
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(HermesError, match="not allowed"):
+        await client.create_queued_card("unknown", "do a thing")
+    await client.aclose()
+
+    assert requested is False
+
+
+@pytest.mark.asyncio
+async def test_board_reads_use_explicit_allowed_board():
+    requested = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url)
+        return httpx.Response(200, json={"ok": True})
+
+    client = HermesClient(_settings(), transport=httpx.MockTransport(handler))
+    await client.list_board("project-a")
+    await client.get_task("project-b", "t1")
+    await client.aclose()
+
+    assert requested[0].path == "/api/plugins/kanban/board"
+    assert dict(requested[0].params) == {"board": "project-a"}
+    assert requested[1].path == "/api/plugins/kanban/tasks/t1"
+    assert dict(requested[1].params) == {"board": "project-b"}
 
 
 @pytest.mark.asyncio

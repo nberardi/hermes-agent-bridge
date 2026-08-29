@@ -23,6 +23,7 @@ mcp = MCPServer(
     instructions=(
         "Call this site's Hermes as an MCP client. "
         "Queue work with create_queued_card only; nothing here starts or approves a run. "
+        "Select only a board returned by list_allowed_boards. "
         "Reach this server only at the configured PUBLIC_HOSTNAMES HTTPS URL, "
         "never localhost, RFC1918, or stdio."
     ),
@@ -42,6 +43,19 @@ def _client() -> HermesClient:
     return client
 
 
+def _transport_security_settings(s: Settings) -> TransportSecuritySettings:
+    allowed_hosts = [
+        allowed
+        for hostname in s.public_hostnames
+        for allowed in (hostname, f"{hostname}:*")
+    ]
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[*allowed_hosts, "localhost", "127.0.0.1"],
+        allowed_origins=s.allowed_origins,
+    )
+
+
 @mcp.custom_route("/healthz", methods=["GET"])
 async def healthz(_request: Request) -> PlainTextResponse:
     """Container liveness. Does not call Hermes. JWT required except from loopback."""
@@ -55,27 +69,33 @@ async def health() -> dict:
 
 
 @mcp.tool()
-async def list_board() -> dict:
-    """Read the Hermes kanban board (cards, columns, triage). Read-only."""
-    data = await _client().list_board()
+async def list_allowed_boards() -> dict:
+    """List the deployment-authorized kanban board slugs. Does not call Hermes."""
+    return {"boards": _settings().allowed_kanban_boards}
+
+
+@mcp.tool()
+async def list_board(board: str) -> dict:
+    """Read an allowed Hermes kanban board (cards, columns, triage). Read-only."""
+    data = await _client().list_board(board)
     return data if isinstance(data, dict) else {"board": data}
 
 
 @mcp.tool()
-async def get_task(task_id: str) -> dict:
-    """Read one kanban card by id. Read-only."""
-    data = await _client().get_task(task_id)
+async def get_task(board: str, task_id: str) -> dict:
+    """Read one kanban card by id from an allowed board. Read-only."""
+    data = await _client().get_task(board, task_id)
     return data if isinstance(data, dict) else {"task": data}
 
 
 @mcp.tool()
-async def create_queued_card(title: str, body: str = "") -> dict:
+async def create_queued_card(board: str, title: str, body: str = "") -> dict:
     """Queue a card in triage, unassigned. Does not start, approve, or dispatch it.
 
     Hermes will not auto-run this. There is no tool on this bridge that promotes
     a card to ready/running or that hits specify/decompose/approval.
     """
-    data = await _client().create_queued_card(title, body)
+    data = await _client().create_queued_card(board, title, body)
     return data if isinstance(data, dict) else {"created": data}
 
 
@@ -101,11 +121,7 @@ def build_app(s: Settings):
     global settings, client
     settings = s
     client = None
-    security = TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
-        allowed_hosts=[*s.public_hostnames, "localhost", "127.0.0.1"],
-        allowed_origins=[f"https://{h}" for h in s.public_hostnames],
-    )
+    security = _transport_security_settings(s)
     app = mcp.streamable_http_app(
         streamable_http_path="/mcp",
         json_response=True,

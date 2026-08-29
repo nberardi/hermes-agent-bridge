@@ -76,9 +76,14 @@ class HermesClient:
         r.raise_for_status()
         return r.json() if r.content else None
 
-    async def dashboard_post(self, path: str, json: dict[str, Any]) -> Any:
+    async def dashboard_post(
+        self,
+        path: str,
+        json: dict[str, Any],
+        params: dict[str, Any] | None = None,
+    ) -> Any:
         self._guard(path)
-        r = await self._http.post(path, json=json)
+        r = await self._http.post(path, json=json, params=params)
         r.raise_for_status()
         return r.json() if r.content else None
 
@@ -104,20 +109,23 @@ class HermesClient:
                 out["ask"] = f"error:{exc.__class__.__name__}"
         return out
 
-    def _board_params(self) -> dict[str, str]:
-        if self._s.kanban_board:
-            return {"board": self._s.kanban_board}
-        return {}
+    def _board_params(self, board: str) -> dict[str, str]:
+        board = board.strip()
+        if board not in self._s.allowed_kanban_boards:
+            raise HermesError(f"board is not allowed: {board!r}")
+        return {"board": board}
 
-    async def list_board(self) -> Any:
+    async def list_board(self, board: str) -> Any:
         return await self.dashboard_get(
-            f"{KANBAN}/board", params=self._board_params() or None
+            f"{KANBAN}/board", params=self._board_params(board)
         )
 
-    async def get_task(self, task_id: str) -> Any:
-        return await self.dashboard_get(f"{KANBAN}/tasks/{task_id}")
+    async def get_task(self, board: str, task_id: str) -> Any:
+        return await self.dashboard_get(
+            f"{KANBAN}/tasks/{task_id}", params=self._board_params(board)
+        )
 
-    async def create_queued_card(self, title: str, body: str = "") -> Any:
+    async def create_queued_card(self, board: str, title: str, body: str = "") -> Any:
         """Queue work without auto-start.
 
         Hermes POST /tasks with triage=true and no assignee stays in triage
@@ -128,7 +136,11 @@ class HermesClient:
             "body": body,
             "triage": True,
         }
-        return await self.dashboard_post(f"{KANBAN}/tasks", json=payload)
+        return await self.dashboard_post(
+            f"{KANBAN}/tasks",
+            json=payload,
+            params=self._board_params(board),
+        )
 
     async def ask(self, prompt: str, model: str | None = None) -> str:
         if not self._api:

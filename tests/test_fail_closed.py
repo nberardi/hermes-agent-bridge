@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from hermes_agent_bridge import server
 from hermes_agent_bridge.hermes import HermesClient, HermesError
 from hermes_agent_bridge.server import mcp
 
@@ -21,13 +22,14 @@ def _settings(**overrides):
         "bind_host": "127.0.0.1",
         "bind_port": 8080,
         "public_hostnames": ["mcp.example.com"],
+        "allowed_origins": ["https://mcp.example.com"],
         "cf_team_domain": "example.cloudflareaccess.com",
         "cf_aud": "test-aud",
         "dashboard_url": "http://hermes.internal:9119",
         "dashboard_token": "dash-token",
         "api_url": "",
         "api_key": "",
-        "kanban_board": "",
+        "allowed_kanban_boards": ["project-a"],
         "site": "site1",
     }
     base.update(overrides)
@@ -61,10 +63,14 @@ def test_examples_do_not_embed_credentials():
 @pytest.mark.asyncio
 async def test_tools_are_queue_only():
     tools = await mcp.list_tools()
-    names = {t.name for t in tools}
+    by_name = {t.name: t for t in tools}
+    names = set(by_name)
     assert "create_queued_card" in names
+    assert "list_allowed_boards" in names
     assert "health" in names
     assert "ask" in names
+    for name in ("list_board", "get_task", "create_queued_card"):
+        assert "board" in by_name[name].input_schema["required"]
     forbidden = (
         "approv",
         "promote",
@@ -77,6 +83,17 @@ async def test_tools_are_queue_only():
     joined = " ".join(sorted(names)).lower()
     for needle in forbidden:
         assert needle not in joined, names
+
+
+@pytest.mark.asyncio
+async def test_list_allowed_boards_reports_only_configured(monkeypatch):
+    monkeypatch.setattr(
+        server,
+        "settings",
+        _settings(allowed_kanban_boards=["project-b", "project-a"]),
+    )
+
+    assert await server.list_allowed_boards() == {"boards": ["project-b", "project-a"]}
 
 
 @pytest.mark.asyncio
@@ -108,7 +125,7 @@ async def test_health_and_create_work_when_ask_disabled():
     client = HermesClient(_settings(api_url=""), transport=httpx.MockTransport(handler))
     health = await client.health()
     assert health["ask"] == "disabled"
-    created = await client.create_queued_card("queued")
+    created = await client.create_queued_card("project-a", "queued")
     assert created["id"] == "t1"
     await client.aclose()
 
@@ -128,6 +145,7 @@ def test_readme_documents_runtime():
     for key in (
         "SITE",
         "PUBLIC_HOSTNAMES",
+        "HERMES_KANBAN_BOARDS",
         "CF_ACCESS_TEAM_DOMAIN",
         "CF_ACCESS_AUD",
         "HERMES_DASHBOARD_URL",
