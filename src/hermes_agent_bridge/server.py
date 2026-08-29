@@ -136,4 +136,5 @@ def main() -> None:
         s.ask_enabled,
         ",".join(s.public_hostnames),
     )
-    uvicorn.run(app, host=s.bind_host, port=s.bind_port, proxy_headers=True)
+    # Do not enable proxy_headers: that would let X-Forwarded-For spoof loopback.
+    uvicorn.run(app, host=s.bind_host, port=s.bind_port, proxy_headers=False)
