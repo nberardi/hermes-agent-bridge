@@ -27,5 +27,5 @@ jobs:
       - name: Validate Compose
         env:
           HERMES_BRIDGE_VERSION: v0.1.0
-          HERMES_BRIDGE_ENV: .env.example
+          HERMES_BRIDGE_ENV: ../.env.example
         run: docker compose -f deploy/compose.yaml config --quiet
