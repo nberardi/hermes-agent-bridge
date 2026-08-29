@@ -595,8 +595,8 @@ install_proxmox() {
             if [[ "$network" == dhcp ]]; then
                 read -r -p "Use a static IPv4 address instead of DHCP? [y/N] " static_answer
                 if [[ "$static_answer" =~ ^[Yy]$ ]]; then
-                    read -r -p "Static IPv4/CIDR (for example 10.0.0.20/8): " network
-                    read -r -p "IPv4 gateway (for example 10.0.0.1): " gateway
+                    read -r -p "Static IPv4/CIDR (for example 192.168.1.20/24): " network
+                    read -r -p "IPv4 gateway (for example 192.168.1.1): " gateway
                 fi
             else
                 read -r -p "Static IPv4/CIDR [$network]: " requested

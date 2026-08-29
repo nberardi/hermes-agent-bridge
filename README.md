@@ -115,8 +115,8 @@ Python installed for that release.
 
 ### Option C: Proxmox
 
-Use this on a Proxmox VE 8 or 9 host when you want a dedicated LXC. Do not
-clone this repository, create the LXC first, or install Docker inside it.
+Use this on a Proxmox VE 8 or 9 host when you want a dedicated LXC. The
+installer creates the LXC and installs the bridge for you.
 
 Run this directly on the Proxmox VE host:
 
@@ -142,16 +142,11 @@ For a static network, the community script receives the equivalent of:
 
 ```bash
 mode=generated \
-var_ctid='X' \
-var_net='10.0.0.20/8' \
-var_gateway='10.0.0.1' \
+var_ctid='105' \
+var_net='192.168.1.20/24' \
+var_gateway='192.168.1.1' \
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/ct/debian.sh)"
 ```
-
-Replace `X`, the IP/CIDR, and the gateway when prompted. The upstream script
-uses `var_net` for the IP/CIDR itself; a separate `var_net=static` assignment is
-not required. `10.0.0.20/8` is an example usable host address, whereas
-`10.0.0.0/8` denotes the subnet address.
 
 The LXC does not install Docker. On success, the installer prints the CT ID,
 LXC address, and Tunnel origin, for example:
