@@ -234,25 +234,47 @@ pct exec <CTID> -- /opt/hermes-agent-bridge/current/venv/bin/python \
 Exit codes are `0` for success, including an Ask warning; `2` for configuration;
 `3` for JWKS; and `4` for a dashboard failure.
 
-## What the bridge exposes
+## Use the bridge
 
-Tools:
+After adding the MCP URL and Cloudflare Access headers to your MCP client, the
+client can call these tools:
 
-- `health` checks dashboard reachability and the optional Ask gateway.
-- `list_allowed_boards` returns only the configured board slugs.
-- `list_board(board)` and `get_task(board, task_id)` read an explicitly allowed
-  kanban board.
-- `create_queued_card(board, title, body)` creates an unassigned triage card.
-  It does not start or approve work.
-- `ask` sends one question to the internal OpenAI-compatible gateway. It is
-  disabled when `HERMES_API_URL` is unset or the gateway is down.
+| Tool | What it does |
+| --- | --- |
+| `health` | Checks whether the Hermes dashboard and optional Ask gateway are reachable. |
+| `list_allowed_boards` | Lists the kanban boards this bridge is configured to access. |
+| `list_board(board)` | Lists cards on an allowed board. |
+| `get_task(board, task_id)` | Reads one card from an allowed board. |
+| `create_queued_card(board, title, body)` | Creates an unassigned triage card without approving or starting it. |
+| `ask` | Sends a question to the optional internal Ask gateway. |
 
-There is no tool that approves a card, sets `ready` or `running`, calls
-`specify`, `decompose`, or `dispatch`, or reaches a run-approval endpoint.
-There is no stable in-tree vault route in this release. Kanban is the write
-surface.
+The bridge deliberately cannot approve, assign, start, plan, decompose, or
+dispatch work. It does not expose the Hermes vault. Its only write operation is
+creating an unassigned kanban card. The `ask` tool reports that it is disabled
+when `HERMES_API_URL` is not configured or its gateway is down.
 
-## Local development
+## Security boundaries
+
+These rules describe what the installation protects:
+
+- `/mcp` requires a valid Cloudflare Access JWT for the configured team and
+  application AUD. Missing tokens and tokens for another application receive
+  `401`.
+- Docker does not publish a host port. Cloudflare reaches the bridge through
+  the private Docker network.
+- Docker and the installer call `GET /healthz` locally to confirm that the
+  bridge process started and is listening after a deployment or restart. It
+  does not call Hermes; use the MCP `health` tool for that. Only a direct
+  loopback request can call `/healthz` without a JWT.
+- The supported MCP endpoint is the Access-protected HTTPS hostname, not a
+  localhost, private-address, or stdio shortcut.
+- A failure of the optional Ask gateway does not disable dashboard or kanban
+  tools.
+
+## Development
+
+This section is only for contributors changing the bridge itself. It is not
+part of installation.
 
 ```bash
 python3 -m venv .venv
@@ -264,24 +286,3 @@ make ci
 
 Python 3.12 or newer is required. `uv.lock` is the dependency source of truth;
 `requirements-dev.txt` is the pinned, hashed development export.
-
-## Fail-closed merge bar
-
-1. Requests to `/mcp` without a valid Cloudflare Access JWT receive `401`.
-2. The origin verifies the JWT against the team domain and this application's
-   AUD. A token for another Access app is rejected.
-3. Loopback `GET /healthz` is liveness only and does not call Hermes. Forwarded
-   requests and network neighbors cannot use its JWT exception.
-4. Compose has no published host port. Cloudflare reaches it over the private
-   Docker network.
-5. The bridge can queue an unassigned triage card but cannot approve, promote,
-   or dispatch it.
-6. Ask is optional. Its failure does not block dashboard and kanban tools.
-7. The supported MCP path is the named Access-protected HTTPS URL, not a local,
-   private-address, or stdio shortcut.
-
-## Done when
-
-An MCP client can add the Access-protected HTTPS MCP URL and call `health`,
-`ask`, or `create_queued_card` with an explicitly allowed board against Hermes,
-and unauthenticated origin calls are rejected.
