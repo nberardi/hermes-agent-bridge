@@ -21,13 +21,6 @@ Vault: there is no stable in-tree vault plugin route this cut can call. Kanban i
 
 `PUBLIC_HOSTNAMES` must include the tunnel hostname so the MCP SDK does not 421.
 
-## What this is not
-
-- Not a Slack or Telegram bot
-- Not a wrapper around `hermes mcp serve`
-- Not an internet listener on the Hermes dashboard or ask gateway
-- No host port published, no router hole. `cloudflared` reaches the container on the docker network.
-
 ## Cloudflare (existing pattern; no new product)
 
 Same idea as putting Access in front of any private origin:
